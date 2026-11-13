@@ -1,5 +1,6 @@
 import base64
 import csv
+import hmac
 import io
 import math
 import os
@@ -9,7 +10,7 @@ from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
-from flask import Flask, jsonify, request, send_file, send_from_directory
+from flask import Flask, jsonify, request, send_file, send_from_directory, Response
 from werkzeug.exceptions import HTTPException
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -24,6 +25,15 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 # In-memory jobs are intentionally ephemeral; deploy with a single worker or replace with a DB.
 JOBS = {}
 LOCK = Lock()
+
+@app.before_request
+def require_access():
+    password = os.environ.get('APP_ACCESS_PASSWORD', '')
+    if not password:
+        return jsonify(error='Server access password not configured'), 503
+    auth = request.authorization
+    if not auth or not hmac.compare_digest(auth.password or '', password):
+        return Response('Authentication required', 401, {'WWW-Authenticate': 'Basic realm="TyreCycle Review"'})
 
 class WorkflowError(Exception):
     pass
@@ -96,13 +106,17 @@ def analyze():
         im = Image.open(io.BytesIO(raw))
         im.verify()
         im = Image.open(io.BytesIO(raw))
+        original_width, original_height = im.size
         im.thumbnail((2400, 2400))
+        calibration_scale = im.width / original_width
         if im.mode != 'RGB':
             im = im.convert('RGB')
     except (UnidentifiedImageError, OSError, ValueError):
         return jsonify(error='Unsupported or invalid image'), 400
     px = safe_number(request.form.get('reference_distance_px'))
     cm = safe_number(request.form.get('reference_distance_cm'))
+    if px and cm:
+        px *= calibration_scale
     if bool(px) != bool(cm):
         return jsonify(error='Enter both ruler calibration values, or neither'), 400
     job_id = uuid4().hex
