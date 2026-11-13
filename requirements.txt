@@ -2,3 +2,4 @@ Flask>=3.0,<4
 Pillow>=10,<13
 reportlab>=4,<5
 inference-sdk>=0.30
+gunicorn>=22,<24
