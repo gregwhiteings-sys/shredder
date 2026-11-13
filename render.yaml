@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: tyrecycle-shredder-review
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 180 app:app
+    envVars:
+      - key: ROBOFLOW_API_KEY
+        sync: false
+      - key: APP_ACCESS_PASSWORD
+        sync: false
